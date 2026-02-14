@@ -15,13 +15,15 @@ class TrilliumClient {
   }
 
   // ─── Core Fetch ──────────────────────────────────────────────────────
-  private async fetch<T>(path: string): Promise<T> {
+  private async fetch<T>(path: string, skipCache: boolean = false): Promise<T> {
     const url = `${this.baseUrl}${path}`;
     console.log(`[Trillium] Fetching: ${url}`);
 
     const res = await fetch(url, {
       headers: { Accept: "application/json" },
-      next: { revalidate: 3600 }, // Cache for 1 hour in Next.js
+      // Disable Next.js cache for large responses
+      cache: skipCache ? "no-store" : undefined,
+      ...(skipCache ? {} : { next: { revalidate: 3600 } }),
     });
 
     if (!res.ok) {
@@ -44,14 +46,16 @@ class TrilliumClient {
    * Get all validators for a specific epoch
    */
   async getEpochValidators(epoch: number): Promise<TrilliumValidatorReward[]> {
-    return this.fetch<TrilliumValidatorReward[]>(`/validator_rewards/${epoch}`);
+    // Large response — skip cache
+    return this.fetch<TrilliumValidatorReward[]>(`/validator_rewards/${epoch}`, true);
   }
 
   /**
    * Get latest epoch data for all validators
    */
   async getLatestValidatorRewards(): Promise<TrilliumValidatorReward[]> {
-    return this.fetch<TrilliumValidatorReward[]>(`/validator_rewards/`);
+    // Large response (~6MB) — must skip cache
+    return this.fetch<TrilliumValidatorReward[]>(`/validator_rewards/`, true);
   }
 
   /**
@@ -61,7 +65,7 @@ class TrilliumClient {
     const path = pubkey
       ? `/ten_epoch_validator_rewards/${pubkey}`
       : `/ten_epoch_validator_rewards`;
-    return this.fetch<TrilliumValidatorReward[]>(path);
+    return this.fetch<TrilliumValidatorReward[]>(path, !pubkey);
   }
 
   /**
@@ -72,7 +76,7 @@ class TrilliumClient {
     const path = pubkey
       ? `/recency_weighted_average_validator_rewards/${pubkey}`
       : `/recency_weighted_average_validator_rewards`;
-    return this.fetch<TrilliumValidatorReward[]>(path);
+    return this.fetch<TrilliumValidatorReward[]>(path, !pubkey);
   }
 
   // ─── Epoch Data ──────────────────────────────────────────────────────
@@ -111,7 +115,7 @@ class TrilliumClient {
    * Get skip analysis for all validators in a specific epoch
    */
   async getSkipAnalysisByEpoch(epoch: number): Promise<TrilliumSkipAnalysis[]> {
-    return this.fetch<TrilliumSkipAnalysis[]>(`/skip_analysis/${epoch}`);
+    return this.fetch<TrilliumSkipAnalysis[]>(`/skip_analysis/${epoch}`, true);
   }
 
   // ─── Data Normalization ──────────────────────────────────────────────
@@ -150,7 +154,7 @@ class TrilliumClient {
       priorityFeeTips: raw.priority_fee_tips != null ? String(raw.priority_fee_tips) : null,
       totalPriorityFees: raw.total_priority_fees != null ? String(raw.total_priority_fees) : null,
       delegatorPriorityFees: raw.delegator_priority_fees != null ? String(raw.delegator_priority_fees) : null,
-      activeStake: String(raw.active_stake ?? 0),
+      activeStake: String(raw.activated_stake ?? raw.active_stake ?? 0),
       stakePercentage: String(raw.stake_percentage ?? 0),
       avgSlotDurationMs: raw.avg_slot_duration_ms != null ? String(raw.avg_slot_duration_ms) : null,
       medianSlotDurationMs: raw.median_slot_duration_ms != null ? String(raw.median_slot_duration_ms) : null,
@@ -179,9 +183,8 @@ class TrilliumClient {
   ): TrilliumValidatorReward | null {
     if (!validators.length) return null;
 
-    // Filter out validators with very low stake (likely inactive)
     const active = validators.filter(
-      (v) => v.active_stake > 1000 && v.skip_rate < 20 && v.commission <= 10
+      (v) => (v.activated_stake ?? v.active_stake) > 1000 && v.skip_rate < 20 && v.commission <= 10
     );
 
     if (!active.length) return null;
@@ -197,7 +200,7 @@ class TrilliumClient {
   calculateNetworkAverages(
     validators: TrilliumValidatorReward[]
   ): Partial<TrilliumValidatorReward> {
-    const active = validators.filter((v) => v.active_stake > 1000);
+    const active = validators.filter((v) => (v.activated_stake ?? v.active_stake) > 1000);
     const n = active.length || 1;
 
     return {
@@ -224,5 +227,4 @@ class TrilliumClient {
   }
 }
 
-// Singleton
 export const trillium = new TrilliumClient();

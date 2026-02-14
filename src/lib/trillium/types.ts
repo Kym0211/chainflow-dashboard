@@ -53,6 +53,7 @@ export interface TrilliumValidatorReward {
 
   // Stake
   active_stake: number;
+  activated_stake?: number;
   stake_percentage: number;
   total_from_stake_pools?: number;
   total_not_from_stake_pools?: number;

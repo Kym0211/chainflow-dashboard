@@ -11,6 +11,9 @@ import {
   boolean,
 } from "drizzle-orm/pg-core";
 
+// Using unconstrained numeric() for all decimal fields to avoid overflow
+// from varying Trillium API value sizes (lamports vs SOL, etc.)
+
 // ─── Epoch-level validator data from Trillium API ───────────────────────────
 export const validatorEpochs = pgTable(
   "validator_epochs",
@@ -20,9 +23,9 @@ export const validatorEpochs = pgTable(
     epoch: integer("epoch").notNull(),
 
     // Performance - TVC & Voting
-    epochCredits: numeric("epoch_credits", { precision: 12, scale: 0 }),
+    epochCredits: numeric("epoch_credits"),
     votesCast: integer("votes_cast"),
-    skipRate: numeric("skip_rate", { precision: 8, scale: 5 }),
+    skipRate: numeric("skip_rate"),
     leaderSlots: integer("leader_slots"),
     signatures: integer("signatures"),
 
@@ -31,40 +34,40 @@ export const validatorEpochs = pgTable(
     jitoOverallRank: integer("jito_overall_rank"),
 
     // APY Breakdown
-    compoundOverallApy: numeric("compound_overall_apy", { precision: 10, scale: 6 }),
-    totalInflationApy: numeric("total_inflation_apy", { precision: 10, scale: 6 }),
-    totalMevApy: numeric("total_mev_apy", { precision: 10, scale: 6 }),
-    delegatorBlockRewardsApy: numeric("delegator_block_rewards_apy", { precision: 10, scale: 6 }),
-    delegatorCompoundBlockRewardsApy: numeric("delegator_compound_block_rewards_apy", { precision: 10, scale: 6 }),
-    totalCompoundInflationApy: numeric("total_compound_inflation_apy", { precision: 10, scale: 6 }),
-    totalCompoundMevApy: numeric("total_compound_mev_apy", { precision: 10, scale: 6 }),
+    compoundOverallApy: numeric("compound_overall_apy"),
+    totalInflationApy: numeric("total_inflation_apy"),
+    totalMevApy: numeric("total_mev_apy"),
+    delegatorBlockRewardsApy: numeric("delegator_block_rewards_apy"),
+    delegatorCompoundBlockRewardsApy: numeric("delegator_compound_block_rewards_apy"),
+    totalCompoundInflationApy: numeric("total_compound_inflation_apy"),
+    totalCompoundMevApy: numeric("total_compound_mev_apy"),
 
     // Rewards & Income (SOL)
-    rewards: numeric("rewards", { precision: 20, scale: 9 }),
-    mevEarned: numeric("mev_earned", { precision: 20, scale: 9 }),
-    mevToValidator: numeric("mev_to_validator", { precision: 20, scale: 9 }),
-    mevToStakers: numeric("mev_to_stakers", { precision: 20, scale: 9 }),
-    voteCost: numeric("vote_cost", { precision: 20, scale: 9 }),
+    rewards: numeric("rewards"),
+    mevEarned: numeric("mev_earned"),
+    mevToValidator: numeric("mev_to_validator"),
+    mevToStakers: numeric("mev_to_stakers"),
+    voteCost: numeric("vote_cost"),
 
     // Block Rewards Detail
-    totalBlockRewardsBeforeBurn: numeric("total_block_rewards_before_burn", { precision: 20, scale: 9 }),
-    totalBlockRewardsAfterBurn: numeric("total_block_rewards_after_burn", { precision: 20, scale: 9 }),
-    validatorSignatureFees: numeric("validator_signature_fees", { precision: 20, scale: 9 }),
-    validatorPriorityFees: numeric("validator_priority_fees", { precision: 20, scale: 9 }),
+    totalBlockRewardsBeforeBurn: numeric("total_block_rewards_before_burn"),
+    totalBlockRewardsAfterBurn: numeric("total_block_rewards_after_burn"),
+    validatorSignatureFees: numeric("validator_signature_fees"),
+    validatorPriorityFees: numeric("validator_priority_fees"),
 
     // Priority Fees
-    priorityFeeCommission: numeric("priority_fee_commission", { precision: 8, scale: 5 }),
-    priorityFeeTips: numeric("priority_fee_tips", { precision: 20, scale: 9 }),
-    totalPriorityFees: numeric("total_priority_fees", { precision: 20, scale: 9 }),
-    delegatorPriorityFees: numeric("delegator_priority_fees", { precision: 20, scale: 9 }),
+    priorityFeeCommission: numeric("priority_fee_commission"),
+    priorityFeeTips: numeric("priority_fee_tips"),
+    totalPriorityFees: numeric("total_priority_fees"),
+    delegatorPriorityFees: numeric("delegator_priority_fees"),
 
     // Stake
-    activeStake: numeric("active_stake", { precision: 20, scale: 5 }),
-    stakePercentage: numeric("stake_percentage", { precision: 10, scale: 8 }),
+    activeStake: numeric("active_stake"),
+    stakePercentage: numeric("stake_percentage"),
 
     // Slot Duration
-    avgSlotDurationMs: numeric("avg_slot_duration_ms", { precision: 10, scale: 3 }),
-    medianSlotDurationMs: numeric("median_slot_duration_ms", { precision: 10, scale: 3 }),
+    avgSlotDurationMs: numeric("avg_slot_duration_ms"),
+    medianSlotDurationMs: numeric("median_slot_duration_ms"),
 
     // Meta
     commission: integer("commission"),
@@ -74,15 +77,15 @@ export const validatorEpochs = pgTable(
     fdSchedulerMode: text("fd_scheduler_mode"),
 
     // Stake Pools
-    totalFromStakePools: numeric("total_from_stake_pools", { precision: 20, scale: 5 }),
-    totalNotFromStakePools: numeric("total_not_from_stake_pools", { precision: 20, scale: 5 }),
+    totalFromStakePools: numeric("total_from_stake_pools"),
+    totalNotFromStakePools: numeric("total_not_from_stake_pools"),
 
     // Flags
     isDz: boolean("is_dz"),
     isSfdp: boolean("is_sfdp"),
 
     // IBRL / BAM
-    ibrlScore: numeric("ibrl_score", { precision: 10, scale: 4 }),
+    ibrlScore: numeric("ibrl_score"),
 
     // Raw JSON for any fields we haven't explicitly modeled
     rawData: jsonb("raw_data"),
@@ -103,26 +106,21 @@ export const incomeReports = pgTable(
     id: serial("id").primaryKey(),
     pubkey: text("pubkey").notNull(),
     epoch: integer("epoch").notNull(),
-    source: text("source").notNull(), // 'jpool' | 'staking_kiwi' | 'manual'
+    source: text("source").notNull(),
 
-    // Income breakdown (SOL)
-    inflationRewards: numeric("inflation_rewards", { precision: 20, scale: 9 }),
-    commissionEarned: numeric("commission_earned", { precision: 20, scale: 9 }),
-    mevCommission: numeric("mev_commission", { precision: 20, scale: 9 }),
-    blockRewards: numeric("block_rewards", { precision: 20, scale: 9 }),
-    priorityFeeIncome: numeric("priority_fee_income", { precision: 20, scale: 9 }),
-    totalIncome: numeric("total_income", { precision: 20, scale: 9 }),
+    inflationRewards: numeric("inflation_rewards"),
+    commissionEarned: numeric("commission_earned"),
+    mevCommission: numeric("mev_commission"),
+    blockRewards: numeric("block_rewards"),
+    priorityFeeIncome: numeric("priority_fee_income"),
+    totalIncome: numeric("total_income"),
 
-    // Costs
-    voteCost: numeric("vote_cost", { precision: 20, scale: 9 }),
-    serverCost: numeric("server_cost", { precision: 20, scale: 9 }), // manual input
+    voteCost: numeric("vote_cost"),
+    serverCost: numeric("server_cost"),
 
-    // Net
-    netIncome: numeric("net_income", { precision: 20, scale: 9 }),
+    netIncome: numeric("net_income"),
 
-    // Raw data from CSV
     rawData: jsonb("raw_data"),
-
     uploadedAt: timestamp("uploaded_at").defaultNow(),
   },
   (table) => [
@@ -140,33 +138,27 @@ export const benchmarkEpochs = pgTable(
   "benchmark_epochs",
   {
     id: serial("id").primaryKey(),
-    benchmarkId: text("benchmark_id").notNull(), // 'shinobi_top' | 'network_avg' | 'network_median' | specific pubkey
-    benchmarkLabel: text("benchmark_label"), // Human readable: "Top Shinobi Performer", "Network Average"
-    pubkey: text("pubkey"), // Actual pubkey if tracking a specific validator
+    benchmarkId: text("benchmark_id").notNull(),
+    benchmarkLabel: text("benchmark_label"),
+    pubkey: text("pubkey"),
     epoch: integer("epoch").notNull(),
 
-    // Performance
-    epochCredits: numeric("epoch_credits", { precision: 12, scale: 0 }),
+    epochCredits: numeric("epoch_credits"),
     votesCast: integer("votes_cast"),
-    skipRate: numeric("skip_rate", { precision: 8, scale: 5 }),
+    skipRate: numeric("skip_rate"),
     leaderSlots: integer("leader_slots"),
 
-    // APY
-    compoundOverallApy: numeric("compound_overall_apy", { precision: 10, scale: 6 }),
-    totalInflationApy: numeric("total_inflation_apy", { precision: 10, scale: 6 }),
-    totalMevApy: numeric("total_mev_apy", { precision: 10, scale: 6 }),
+    compoundOverallApy: numeric("compound_overall_apy"),
+    totalInflationApy: numeric("total_inflation_apy"),
+    totalMevApy: numeric("total_mev_apy"),
 
-    // Rewards
-    rewards: numeric("rewards", { precision: 20, scale: 9 }),
-    mevEarned: numeric("mev_earned", { precision: 20, scale: 9 }),
+    rewards: numeric("rewards"),
+    mevEarned: numeric("mev_earned"),
 
-    // Slot Duration
-    avgSlotDurationMs: numeric("avg_slot_duration_ms", { precision: 10, scale: 3 }),
+    avgSlotDurationMs: numeric("avg_slot_duration_ms"),
 
-    // Stake
-    activeStake: numeric("active_stake", { precision: 20, scale: 5 }),
+    activeStake: numeric("active_stake"),
 
-    // JIP-25
     jip25Rank: integer("jip25_rank"),
 
     rawData: jsonb("raw_data"),
@@ -184,7 +176,7 @@ export const solPrices = pgTable(
   {
     id: serial("id").primaryKey(),
     epoch: integer("epoch").notNull(),
-    priceUsd: numeric("price_usd", { precision: 12, scale: 4 }),
+    priceUsd: numeric("price_usd"),
     fetchedAt: timestamp("fetched_at").defaultNow(),
   },
   (table) => [uniqueIndex("sol_prices_epoch_idx").on(table.epoch)]

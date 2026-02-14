@@ -1,6 +1,8 @@
 // Chainflow validator identity pubkey
+// Trillium API keys data by identity pubkey, not vote account
+// Vote account: CAf8jfgqhia5VNrEF4A7Y9VLD3numMq9DVSceq7cPhNY
 export const CHAINFLOW_PUBKEY =
-  process.env.CHAINFLOW_PUBKEY || "CAf8jfgqhia5VNrEF4A7Y9VLD3numMq9DVSceq7cPhNY";
+  process.env.CHAINFLOW_PUBKEY || "2mMGsb5uy1Q4Dvezr8HK2E8SJoChcb2X7b61tJPaVHHd";
 
 // Benchmark IDs used in the benchmark_epochs table
 export const BENCHMARKS = {

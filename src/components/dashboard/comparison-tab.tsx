@@ -6,8 +6,8 @@ import {
   PolarGrid,
   PolarAngleAxis,
   PolarRadiusAxis,
-  AreaChart,
-  Area,
+  ComposedChart,
+  Bar,
   Line,
   XAxis,
   YAxis,
@@ -16,7 +16,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import { toNum, formatNumber, formatPercent } from "@/lib/utils";
+import { toNum, formatNumber, formatPercent, shortenPubkey } from "@/lib/utils";
 import { COLORS } from "@/lib/constants";
 import type { ValidatorEpoch, BenchmarkEpoch } from "@/lib/db/schema";
 
@@ -32,8 +32,26 @@ export function ComparisonTab({ data, benchmarks }: ComparisonTabProps) {
   const shinobiTop = benchmarks?.shinobi_top || [];
   const networkAvg = benchmarks?.network_avg || [];
 
-  const latestSt = shinobiTop.find((b) => b.epoch === latest?.epoch);
-  const latestNa = networkAvg.find((b) => b.epoch === latest?.epoch);
+  // Get latest benchmark data
+  const latestSt = shinobiTop.length
+    ? shinobiTop.reduce((a, b) => (a.epoch > b.epoch ? a : b))
+    : null;
+  const latestNa = networkAvg.length
+    ? networkAvg.reduce((a, b) => (a.epoch > b.epoch ? a : b))
+    : null;
+
+  // Extract top performer name from rawData
+  const topPerformerRaw = latestSt?.rawData as Record<string, unknown> | null;
+  const topPerformerName = (topPerformerRaw?.name as string) || null;
+  const topPerformerPubkey = latestSt?.pubkey;
+
+  const topLabel = topPerformerName
+    ? topPerformerName.length > 25
+      ? topPerformerName.slice(0, 25) + "…"
+      : topPerformerName
+    : topPerformerPubkey
+    ? shortenPubkey(topPerformerPubkey, 6)
+    : "Top Performer";
 
   if (!latest) {
     return (
@@ -43,9 +61,13 @@ export function ComparisonTab({ data, benchmarks }: ComparisonTabProps) {
     );
   }
 
+  // Get benchmark values (use latest known)
+  const topApy = latestSt ? toNum(latestSt.compoundOverallApy) : null;
+  const avgApy = latestNa ? toNum(latestNa.compoundOverallApy) : null;
+
   // Radar data (normalized to 0–100 scale)
   const maxCredits = 445000;
-  const maxApy = 10;
+  const maxApy = Math.max(toNum(latest.compoundOverallApy), topApy ?? 0, 10) * 1.2;
 
   const radarData = [
     {
@@ -93,23 +115,32 @@ export function ComparisonTab({ data, benchmarks }: ComparisonTabProps) {
     { metric: "Active Stake", cf: toNum(latest.activeStake), st: latestSt ? toNum(latestSt.activeStake) : null, fmt: (v: number) => `${formatNumber(v / 1000, 1)}K SOL`, better: "higher" as const },
   ];
 
-  // Historical chart data
-  const historyData = sorted.map((d) => {
-    const st = shinobiTop.find((b) => b.epoch === d.epoch);
-    const na = networkAvg.find((b) => b.epoch === d.epoch);
-    return {
-      epoch: d.epoch,
-      chainflow: toNum(d.compoundOverallApy),
-      top: st ? toNum(st.compoundOverallApy) : undefined,
-      avg: na ? toNum(na.compoundOverallApy) : undefined,
-    };
-  });
+  // Bar chart data — direct comparison per epoch with benchmark reference lines
+  const barChartData = sorted.map((d) => ({
+    epoch: d.epoch,
+    chainflow: toNum(d.compoundOverallApy),
+    top_ref: topApy,
+    avg_ref: avgApy,
+  }));
 
   return (
     <div>
-      <h2 className="mb-5 text-lg font-bold text-foreground">
-        Chainflow vs Top Performer vs Network
+      <h2 className="mb-2 text-lg font-bold text-foreground">
+        Chainflow vs {topLabel} vs Network
       </h2>
+      {topPerformerName && (
+        <p className="mb-5 text-xs text-muted-foreground">
+          Top performer: <span className="font-semibold text-emerald-400">{topPerformerName}</span>
+          {topPerformerPubkey && (
+            <span className="ml-1.5 font-mono text-[10px] text-muted-foreground/60">
+              ({shortenPubkey(topPerformerPubkey, 4)})
+            </span>
+          )}
+          <span className="ml-1.5">
+            — {formatPercent(latestSt?.compoundOverallApy, 2)} APY
+          </span>
+        </p>
+      )}
 
       <div className="mb-5 grid gap-4 md:grid-cols-2">
         {/* Radar Chart */}
@@ -129,9 +160,9 @@ export function ComparisonTab({ data, benchmarks }: ComparisonTabProps) {
               />
               <PolarRadiusAxis tick={false} axisLine={false} domain={[0, 100]} />
               <Radar name="Chainflow" dataKey="chainflow" stroke={COLORS.primary} fill={COLORS.primary} fillOpacity={0.2} strokeWidth={2} />
-              <Radar name="Top Performer" dataKey="top" stroke={COLORS.shinobiTop} fill={COLORS.shinobiTop} fillOpacity={0.1} strokeWidth={1.5} strokeDasharray="4 4" />
+              <Radar name={topLabel} dataKey="top" stroke={COLORS.shinobiTop} fill={COLORS.shinobiTop} fillOpacity={0.1} strokeWidth={1.5} strokeDasharray="4 4" />
               <Radar name="Network Avg" dataKey="avg" stroke={COLORS.networkAvg} fill={COLORS.networkAvg} fillOpacity={0.05} strokeWidth={1} />
-              <Legend wrapperStyle={{ fontSize: "12px" }} />
+              <Legend wrapperStyle={{ fontSize: "11px" }} />
             </RadarChart>
           </ResponsiveContainer>
         </div>
@@ -146,7 +177,7 @@ export function ComparisonTab({ data, benchmarks }: ComparisonTabProps) {
               <tr className="border-b border-white/[0.08]">
                 <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground">Metric</th>
                 <th className="px-3 py-2.5 text-right font-semibold text-purple-400">Chainflow</th>
-                <th className="px-3 py-2.5 text-right font-semibold text-emerald-400">Top Performer</th>
+                <th className="px-3 py-2.5 text-right font-semibold text-emerald-400">{topLabel}</th>
                 <th className="px-3 py-2.5 text-right font-semibold text-muted-foreground">Δ Delta</th>
               </tr>
             </thead>
@@ -182,28 +213,72 @@ export function ComparisonTab({ data, benchmarks }: ComparisonTabProps) {
         </div>
       </div>
 
-      {/* Historical APY Comparison */}
+      {/* APY Comparison - ComposedChart with bars + reference lines */}
       <div className="glass-card">
-        <h3 className="mb-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+        <h3 className="mb-1 text-xs font-bold uppercase tracking-wider text-muted-foreground">
           APY Comparison Over Time
         </h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <AreaChart data={historyData}>
+        <p className="mb-3 text-[10px] text-muted-foreground">
+          Bars = Chainflow per epoch · Lines = latest benchmark reference
+        </p>
+        <ResponsiveContainer width="100%" height={320}>
+          <ComposedChart data={barChartData}>
             <defs>
-              <linearGradient id="gCfComp" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.25} />
-                <stop offset="95%" stopColor={COLORS.primary} stopOpacity={0} />
+              <linearGradient id="gBar" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={COLORS.primary} stopOpacity={0.9} />
+                <stop offset="100%" stopColor={COLORS.primary} stopOpacity={0.4} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(240 4% 14%)" />
             <XAxis dataKey="epoch" stroke="hsl(240 4% 24%)" fontSize={11} fontFamily="var(--font-mono)" />
-            <YAxis stroke="hsl(240 4% 24%)" fontSize={11} fontFamily="var(--font-mono)" unit="%" domain={["auto", "auto"]} />
-            <Tooltip contentStyle={{ background: "hsl(240 10% 6% / 0.95)", border: "1px solid hsl(263 70% 50% / 0.3)", borderRadius: "8px", fontSize: "12px" }} />
-            <Legend wrapperStyle={{ fontSize: "12px" }} />
-            <Area type="monotone" dataKey="chainflow" name="Chainflow" stroke={COLORS.primary} fill="url(#gCfComp)" strokeWidth={2.5} />
-            <Line type="monotone" dataKey="top" name="Top Performer" stroke={COLORS.shinobiTop} strokeWidth={2} dot={false} strokeDasharray="5 5" />
-            <Line type="monotone" dataKey="avg" name="Network Average" stroke={COLORS.networkAvg} strokeWidth={1.5} dot={false} strokeDasharray="3 3" />
-          </AreaChart>
+            <YAxis stroke="hsl(240 4% 24%)" fontSize={11} fontFamily="var(--font-mono)" unit="%" />
+            <Tooltip
+              contentStyle={{
+                background: "hsl(240 10% 6% / 0.95)",
+                border: "1px solid hsl(263 70% 50% / 0.3)",
+                borderRadius: "8px",
+                fontSize: "12px",
+              }}
+              formatter={(value: number, name: string) => {
+                const label =
+                  name === "chainflow" ? "Chainflow" :
+                  name === "top_ref" ? topLabel :
+                  name === "avg_ref" ? "Network Avg" : name;
+                return [`${value.toFixed(2)}%`, label];
+              }}
+            />
+            <Legend
+              wrapperStyle={{ fontSize: "11px" }}
+              formatter={(value: string) =>
+                value === "chainflow" ? "Chainflow" :
+                value === "top_ref" ? topLabel :
+                value === "avg_ref" ? "Network Avg" : value
+              }
+            />
+            <Bar dataKey="chainflow" fill="url(#gBar)" radius={[4, 4, 0, 0]} barSize={40} />
+            {topApy != null && (
+              <Line
+                type="monotone"
+                dataKey="top_ref"
+                stroke={COLORS.shinobiTop}
+                strokeWidth={2.5}
+                strokeDasharray="8 4"
+                dot={{ r: 4, fill: COLORS.shinobiTop, strokeWidth: 0 }}
+                activeDot={{ r: 6 }}
+              />
+            )}
+            {avgApy != null && (
+              <Line
+                type="monotone"
+                dataKey="avg_ref"
+                stroke={COLORS.networkAvg}
+                strokeWidth={2}
+                strokeDasharray="4 4"
+                dot={{ r: 3, fill: COLORS.networkAvg, strokeWidth: 0 }}
+                activeDot={{ r: 5 }}
+              />
+            )}
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
     </div>
