@@ -92,3 +92,14 @@ export function toNum(value: string | number | null | undefined): number {
   const num = typeof value === "string" ? parseFloat(value) : value;
   return isNaN(num) ? 0 : num;
 }
+
+/**
+ * Extract a field from rawData JSONB
+ */
+export function rawField(row: { rawData: unknown }, field: string): number {
+  const raw = row.rawData as Record<string, unknown> | null;
+  if (!raw) return 0;
+  const val = raw[field];
+  if (val == null) return 0;
+  return typeof val === "number" ? val : parseFloat(String(val)) || 0;
+}

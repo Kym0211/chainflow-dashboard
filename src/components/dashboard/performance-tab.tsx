@@ -3,8 +3,8 @@
 import {
   LineChart,
   Line,
-  AreaChart,
-  Area,
+  ComposedChart,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -12,10 +12,10 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import { Clock, Activity, Cpu, Zap } from "lucide-react";
+import { Clock, Activity, Server, Cpu } from "lucide-react";
 import { MetricCard } from "./metric-card";
-import { toNum, formatNumber, formatPercent } from "@/lib/utils";
-import { COLORS } from "@/lib/constants";
+import { toNum, rawField, formatNumber, formatPercent } from "@/lib/utils";
+import { COLORS, CHART_AXIS, CHART_GRID, CHART_TOOLTIP } from "@/lib/constants";
 import type { ValidatorEpoch, BenchmarkEpoch } from "@/lib/db/schema";
 
 interface PerformanceTabProps {
@@ -27,26 +27,6 @@ export function PerformanceTab({ data, benchmarks }: PerformanceTabProps) {
   const sorted = [...data].sort((a, b) => a.epoch - b.epoch);
   const latest = sorted[sorted.length - 1];
 
-  const shinobiTop = benchmarks?.shinobi_top || [];
-  const networkAvg = benchmarks?.network_avg || [];
-
-  const chartData = sorted.map((d) => {
-    const st = shinobiTop.find((b) => b.epoch === d.epoch);
-    const na = networkAvg.find((b) => b.epoch === d.epoch);
-
-    return {
-      epoch: d.epoch,
-      jip25_rank: d.jip25Rank ?? undefined,
-      slot_duration: toNum(d.avgSlotDurationMs),
-      overall_apy: toNum(d.compoundOverallApy),
-      credits: toNum(d.epochCredits),
-      votes_cast: d.votesCast ?? 0,
-      skip_rate: toNum(d.skipRate),
-      shinobi_apy: st ? toNum(st.compoundOverallApy) : undefined,
-      network_apy: na ? toNum(na.compoundOverallApy) : undefined,
-    };
-  });
-
   if (!latest) {
     return (
       <div className="flex h-64 items-center justify-center text-muted-foreground">
@@ -55,96 +35,203 @@ export function PerformanceTab({ data, benchmarks }: PerformanceTabProps) {
     );
   }
 
+  const shinobiTop = benchmarks?.shinobi_top || [];
+  const networkAvg = benchmarks?.network_avg || [];
+
+  // Extract key metrics from rawData
+  const meanLatency = rawField(latest, "mean_vote_latency");
+  const medianLatency = rawField(latest, "median_vote_latency");
+  const avgCuPerBlock = rawField(latest, "avg_cu_per_block");
+  const avgNonvoteCu = rawField(latest, "avg_nonvote_cu_per_block");
+  const consensusFirst = rawField(latest, "avg_vote_pct_first_third");
+  const consensusMid = rawField(latest, "avg_vote_pct_mid_third");
+  const consensusLast = rawField(latest, "avg_vote_pct_last_third");
+  const consensusTotal = consensusFirst + consensusMid + consensusLast;
+  const blocksProduced = rawField(latest, "blocks_produced");
+
+  // Chart data
+  const chartData = sorted.map((d) => {
+    const st = shinobiTop.find((b) => b.epoch === d.epoch);
+    const stRaw = st?.rawData as Record<string, unknown> | null;
+
+    return {
+      epoch: d.epoch,
+      // Consensus voting
+      first_third: rawField(d, "avg_vote_pct_first_third"),
+      mid_third: rawField(d, "avg_vote_pct_mid_third"),
+      last_third: rawField(d, "avg_vote_pct_last_third"),
+      // Vote latency
+      mean_latency: rawField(d, "mean_vote_latency"),
+      median_latency: rawField(d, "median_vote_latency"),
+      top_latency: stRaw ? Number(stRaw.mean_vote_latency ?? 0) || undefined : undefined,
+      // Compute units
+      avg_cu: rawField(d, "avg_cu_per_block") / 1_000_000, // Convert to M CU
+      avg_nonvote_cu: rawField(d, "avg_nonvote_cu_per_block") / 1_000_000,
+      // APY for reference
+      overall_apy: toNum(d.compoundOverallApy),
+    };
+  });
+
   return (
     <div>
-      {/* Metric cards */}
-      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+      {/* Top metrics */}
+      <div className="mb-7 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <MetricCard
-          title="Avg Slot Duration"
-          value={`${formatNumber(latest.avgSlotDurationMs, 1)}ms`}
-          subtitle="Block production speed"
+          title="Avg Vote Latency"
+          value={meanLatency > 0 ? `${formatNumber(meanLatency, 2)} slots` : "—"}
+          subtitle={medianLatency > 0 ? `Median: ${formatNumber(medianLatency, 2)} slots` : "Vote timing"}
           icon={Clock}
-          accent={COLORS.info}
+          accent={meanLatency > 0 && meanLatency < 2 ? COLORS.success : COLORS.warning}
         />
         <MetricCard
-          title="Votes Cast"
-          value={formatNumber(latest.votesCast, 0)}
-          subtitle="Consensus participation"
+          title="Consensus Voting"
+          value={consensusTotal > 0 ? formatPercent(consensusTotal) : "—"}
+          subtitle={consensusFirst > 0 ? `1st third: ${formatPercent(consensusFirst)}` : "Vote participation"}
           icon={Activity}
-          accent={COLORS.primary}
+          accent={consensusTotal > 90 ? COLORS.success : COLORS.warning}
         />
         <MetricCard
-          title="Leader Slots"
-          value={String(latest.leaderSlots ?? 0)}
-          subtitle={`${formatPercent(latest.skipRate)} skipped`}
+          title="Avg CU/Block"
+          value={avgCuPerBlock > 0 ? `${formatNumber(avgCuPerBlock / 1_000_000, 2)}M` : "—"}
+          subtitle={avgNonvoteCu > 0 ? `Non-vote: ${formatNumber(avgNonvoteCu / 1_000_000, 2)}M` : "Compute units per block"}
           icon={Cpu}
-          accent={COLORS.warning}
+          accent={COLORS.secondary}
         />
         <MetricCard
           title="Client"
-          value={latest.clientType ?? "Unknown"}
-          subtitle={latest.version ?? ""}
-          icon={Zap}
-          accent={COLORS.success}
+          value={latest.clientType || "Unknown"}
+          subtitle={latest.version || ""}
+          icon={Server}
+          accent={COLORS.info}
         />
       </div>
 
-      {/* Top row: JIP-25 + Slot Duration */}
+      {/* Row 1: Consensus Voting + Vote Latency */}
       <div className="mb-5 grid gap-4 md:grid-cols-2">
         <div className="glass-card">
-          <h3 className="mb-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-            JIP-25 Rank History
+          <h3 className="mb-1 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            Consensus Voting Over Time
           </h3>
+          <p className="mb-3 text-[10px] text-muted-foreground">
+            % of votes in each third of the epoch
+          </p>
+          <ResponsiveContainer width="100%" height={240}>
+            <ComposedChart data={chartData}>
+              <CartesianGrid {...CHART_GRID} />
+              <XAxis dataKey="epoch" {...CHART_AXIS} fontSize={10} />
+              <YAxis {...CHART_AXIS} fontSize={10} unit="%" />
+              <Tooltip {...CHART_TOOLTIP} />
+              <Legend wrapperStyle={{ fontSize: "10px" }} />
+              <Bar dataKey="first_third" name="1st Third" stackId="cv" fill={COLORS.success} />
+              <Bar dataKey="mid_third" name="Mid Third" stackId="cv" fill={COLORS.secondary} />
+              <Bar dataKey="last_third" name="Last Third" stackId="cv" fill={COLORS.primary} radius={[4, 4, 0, 0]} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="glass-card">
+          <h3 className="mb-1 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            Vote Latency Over Time
+          </h3>
+          <p className="mb-3 text-[10px] text-muted-foreground">
+            Lower is better · measured in slots
+          </p>
           <ResponsiveContainer width="100%" height={240}>
             <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(240 4% 14%)" />
-              <XAxis dataKey="epoch" stroke="hsl(240 4% 24%)" fontSize={10} fontFamily="var(--font-mono)" />
-              <YAxis stroke="hsl(240 4% 24%)" fontSize={10} fontFamily="var(--font-mono)" reversed domain={[0, "auto"]} />
-              <Tooltip contentStyle={{ background: "hsl(240 10% 6% / 0.95)", border: "1px solid hsl(263 70% 50% / 0.3)", borderRadius: "8px", fontSize: "12px" }} />
-              <Line type="monotone" dataKey="jip25_rank" name="JIP-25 Rank" stroke={COLORS.warning} strokeWidth={2.5} dot={{ r: 3, fill: COLORS.warning }} />
+              <CartesianGrid {...CHART_GRID} />
+              <XAxis dataKey="epoch" {...CHART_AXIS} fontSize={10} />
+              <YAxis {...CHART_AXIS} fontSize={10} unit=" sl" />
+              <Tooltip {...CHART_TOOLTIP} />
+              <Legend wrapperStyle={{ fontSize: "10px" }} />
+              <Line type="monotone" dataKey="mean_latency" name="Mean Latency" stroke={COLORS.warning} strokeWidth={2.5} dot={{ r: 3, fill: COLORS.warning }} />
+              <Line type="monotone" dataKey="median_latency" name="Median Latency" stroke={COLORS.info} strokeWidth={2} dot={{ r: 2, fill: COLORS.info }} />
+              <Line type="monotone" dataKey="top_latency" name="Top Performer" stroke={COLORS.shinobiTop} strokeWidth={1.5} dot={false} strokeDasharray="4 4" />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Row 2: Avg CU + Vote Latency vs APY */}
+      <div className="mb-5 grid gap-4 md:grid-cols-2">
+        <div className="glass-card">
+          <h3 className="mb-1 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            Avg Compute Units Over Time
+          </h3>
+          <p className="mb-3 text-[10px] text-muted-foreground">
+            Total CU and non-vote CU per block (millions)
+          </p>
+          <ResponsiveContainer width="100%" height={240}>
+            <LineChart data={chartData}>
+              <CartesianGrid {...CHART_GRID} />
+              <XAxis dataKey="epoch" {...CHART_AXIS} fontSize={10} />
+              <YAxis {...CHART_AXIS} fontSize={10} unit="M" />
+              <Tooltip {...CHART_TOOLTIP} />
+              <Legend wrapperStyle={{ fontSize: "10px" }} />
+              <Line type="monotone" dataKey="avg_cu" name="Total CU/Block" stroke={COLORS.primary} strokeWidth={2.5} dot={{ r: 3, fill: COLORS.primary }} />
+              <Line type="monotone" dataKey="avg_nonvote_cu" name="Non-vote CU" stroke={COLORS.secondary} strokeWidth={2} dot={{ r: 2, fill: COLORS.secondary }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
 
         <div className="glass-card">
-          <h3 className="mb-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-            Slot Duration Over Time
+          <h3 className="mb-1 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            Overall APY Trend
           </h3>
+          <p className="mb-3 text-[10px] text-muted-foreground">
+            Compound overall APY per epoch
+          </p>
           <ResponsiveContainer width="100%" height={240}>
-            <AreaChart data={chartData}>
-              <defs>
-                <linearGradient id="gSlot" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={COLORS.info} stopOpacity={0.3} />
-                  <stop offset="95%" stopColor={COLORS.info} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(240 4% 14%)" />
-              <XAxis dataKey="epoch" stroke="hsl(240 4% 24%)" fontSize={10} fontFamily="var(--font-mono)" />
-              <YAxis stroke="hsl(240 4% 24%)" fontSize={10} fontFamily="var(--font-mono)" unit="ms" />
-              <Tooltip contentStyle={{ background: "hsl(240 10% 6% / 0.95)", border: "1px solid hsl(263 70% 50% / 0.3)", borderRadius: "8px", fontSize: "12px" }} />
-              <Area type="monotone" dataKey="slot_duration" name="Avg Slot Duration" stroke={COLORS.info} fill="url(#gSlot)" strokeWidth={2} />
-            </AreaChart>
+            <LineChart data={chartData}>
+              <CartesianGrid {...CHART_GRID} />
+              <XAxis dataKey="epoch" {...CHART_AXIS} fontSize={10} />
+              <YAxis {...CHART_AXIS} fontSize={10} unit="%" domain={["auto", "auto"]} />
+              <Tooltip {...CHART_TOOLTIP} />
+              <Line type="monotone" dataKey="overall_apy" name="Chainflow APY" stroke={COLORS.primary} strokeWidth={2.5} dot={{ r: 3, fill: COLORS.primary }} />
+            </LineChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      {/* APY Comparison */}
-      <div className="glass-card">
+      {/* Detailed metrics table */}
+      <div className="glass-card overflow-auto">
         <h3 className="mb-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-          Overall APY Trend
+          Epoch-by-Epoch Performance
         </h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(240 4% 14%)" />
-            <XAxis dataKey="epoch" stroke="hsl(240 4% 24%)" fontSize={11} fontFamily="var(--font-mono)" />
-            <YAxis stroke="hsl(240 4% 24%)" fontSize={11} fontFamily="var(--font-mono)" unit="%" domain={["auto", "auto"]} />
-            <Tooltip contentStyle={{ background: "hsl(240 10% 6% / 0.95)", border: "1px solid hsl(263 70% 50% / 0.3)", borderRadius: "8px", fontSize: "12px" }} />
-            <Legend wrapperStyle={{ fontSize: "12px" }} />
-            <Line type="monotone" dataKey="overall_apy" name="Chainflow APY" stroke={COLORS.primary} strokeWidth={2.5} dot={{ r: 3, fill: COLORS.primary }} />
-            <Line type="monotone" dataKey="shinobi_apy" name="Top Performer APY" stroke={COLORS.shinobiTop} strokeWidth={1.5} dot={false} strokeDasharray="4 4" />
-            <Line type="monotone" dataKey="network_apy" name="Network Avg APY" stroke={COLORS.networkAvg} strokeWidth={1} dot={false} strokeDasharray="2 2" />
-          </LineChart>
-        </ResponsiveContainer>
+        <table className="w-full border-collapse font-mono text-xs">
+          <thead>
+            <tr className="border-b border-white/[0.08]">
+              {["Epoch", "Vote Latency", "Consensus %", "CU/Block", "Skip Rate", "TVC Credits", "TVC Rank", "Blocks"].map(
+                (h) => (
+                  <th key={h} className="px-3 py-2 text-right font-semibold text-muted-foreground first:text-left">
+                    {h}
+                  </th>
+                )
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.slice().reverse().slice(0, 15).map((d) => {
+              const ml = rawField(d, "mean_vote_latency");
+              const ct = rawField(d, "avg_vote_pct_first_third") + rawField(d, "avg_vote_pct_mid_third") + rawField(d, "avg_vote_pct_last_third");
+              const cu = rawField(d, "avg_cu_per_block");
+              const rank = rawField(d, "vote_credits_rank");
+              const blocks = rawField(d, "blocks_produced");
+
+              return (
+                <tr key={d.epoch} className="border-b border-white/[0.03]">
+                  <td className="px-3 py-2 text-left text-muted-foreground">{d.epoch}</td>
+                  <td className="px-3 py-2 text-right text-amber-400">{ml > 0 ? `${formatNumber(ml, 2)} sl` : "—"}</td>
+                  <td className="px-3 py-2 text-right text-emerald-400">{ct > 0 ? formatPercent(ct) : "—"}</td>
+                  <td className="px-3 py-2 text-right text-blue-400">{cu > 0 ? `${formatNumber(cu / 1_000_000, 2)}M` : "—"}</td>
+                  <td className="px-3 py-2 text-right text-orange-400">{formatPercent(d.skipRate)}</td>
+                  <td className="px-3 py-2 text-right text-purple-400">{formatNumber(toNum(d.epochCredits), 0)}</td>
+                  <td className="px-3 py-2 text-right text-cyan-400">{rank > 0 ? `#${rank}` : "—"}</td>
+                  <td className="px-3 py-2 text-right text-muted-foreground">{blocks > 0 ? blocks : "—"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );

@@ -50,4 +50,26 @@ export const COLORS = {
   muted: "#52525b",
   shinobiTop: "#34d399",
   networkAvg: "#71717a",
+  inflation: "#f472b6",
+} as const;
+
+// Chart axis/grid styling
+export const CHART_AXIS = {
+  stroke: "hsl(240 5% 40%)",
+  fontSize: 11,
+  fontFamily: "var(--font-mono)",
+} as const;
+
+export const CHART_GRID = {
+  strokeDasharray: "3 3",
+  stroke: "hsl(240 4% 20%)",
+} as const;
+
+export const CHART_TOOLTIP = {
+  contentStyle: {
+    background: "hsl(240 10% 6% / 0.95)",
+    border: "1px solid hsl(263 70% 50% / 0.3)",
+    borderRadius: "8px",
+    fontSize: "12px",
+  },
 } as const;

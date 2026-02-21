@@ -75,6 +75,33 @@ export interface TrilliumValidatorReward {
   ineligible_reason?: string;
   jito_overall_rank?: number;
   jito_passing_eligibility_criteria?: boolean;
+  vote_credits_rank?: number;
+
+  // Vote Latency
+  mean_vote_latency?: number;
+  median_vote_latency?: number;
+  max_vote_latency?: number;
+
+  // Consensus Voting
+  avg_vote_pct_first_third?: number;
+  avg_vote_pct_mid_third?: number;
+  avg_vote_pct_last_third?: number;
+
+  // Compute Units
+  avg_cu_per_block?: number;
+  avg_nonvote_cu_per_block?: number;
+  avg_vote_cu_per_block?: number;
+
+  // Per-Block Averages
+  avg_rewards_per_block?: number;
+  avg_mev_per_block?: number;
+  avg_priority_fees_per_block?: number;
+  blocks_produced?: number;
+
+  // Inflation
+  total_inflation_reward?: number;
+  validator_inflation_reward?: number;
+  delegator_inflation_reward?: number;
 
   // Flags
   is_dz?: boolean;
@@ -91,6 +118,9 @@ export interface TrilliumValidatorReward {
   authorized_voter?: string;
   authorized_withdrawer?: string;
   node_pubkey?: string;
+
+  // Catch-all for additional fields
+  [key: string]: unknown;
 }
 
 export interface TrilliumEpochData {

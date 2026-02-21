@@ -92,7 +92,16 @@
 
 .recharts-cartesian-grid-horizontal line,
 .recharts-cartesian-grid-vertical line {
-  stroke: hsl(240 4% 14%) !important;
+  stroke: hsl(240 4% 20%) !important;
+}
+
+/* Brighter axis labels */
+.recharts-cartesian-axis-tick-value {
+  fill: hsl(240 5% 55%) !important;
+}
+
+.recharts-cartesian-axis-line {
+  stroke: hsl(240 4% 25%) !important;
 }
 
 /* Pulse animation for live indicator */

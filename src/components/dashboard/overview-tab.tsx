@@ -14,8 +14,8 @@ import {
 } from "recharts";
 import { TrendingUp, Zap, Activity, Award, Database, DollarSign } from "lucide-react";
 import { MetricCard } from "./metric-card";
-import { toNum, formatPercent, formatCompact, formatSol, calcDelta } from "@/lib/utils";
-import { COLORS } from "@/lib/constants";
+import { toNum, rawField, formatPercent, formatCompact, formatSol, calcDelta } from "@/lib/utils";
+import { COLORS, CHART_AXIS, CHART_GRID, CHART_TOOLTIP } from "@/lib/constants";
 import type { ValidatorEpoch, BenchmarkEpoch } from "@/lib/db/schema";
 
 interface OverviewTabProps {
@@ -32,7 +32,6 @@ export function OverviewTab({ data, benchmarks }: OverviewTabProps) {
     );
   }
 
-  // Sort by epoch ascending for charts
   const sorted = [...data].sort((a, b) => a.epoch - b.epoch);
   const latest = sorted[sorted.length - 1];
   const prev = sorted.length > 1 ? sorted[sorted.length - 2] : latest;
@@ -40,7 +39,6 @@ export function OverviewTab({ data, benchmarks }: OverviewTabProps) {
   const shinobiTop = benchmarks?.shinobi_top || [];
   const networkAvg = benchmarks?.network_avg || [];
 
-  // Build chart data by merging validator + benchmark data
   const chartData = sorted.map((d) => {
     const epoch = d.epoch;
     const st = shinobiTop.find((b) => b.epoch === epoch);
@@ -53,19 +51,15 @@ export function OverviewTab({ data, benchmarks }: OverviewTabProps) {
       block_apy: toNum(d.delegatorBlockRewardsApy),
       overall_apy: toNum(d.compoundOverallApy),
       skip_rate: toNum(d.skipRate),
-      credits: toNum(d.epochCredits),
+      tvc_rank: rawField(d, "vote_credits_rank") || undefined,
       shinobi_skip: st ? toNum(st.skipRate) : undefined,
-      shinobi_credits: st ? toNum(st.epochCredits) : undefined,
       network_skip: na ? toNum(na.skipRate) : undefined,
-      network_credits: na ? toNum(na.epochCredits) : undefined,
     };
   });
 
   const credDelta = calcDelta(toNum(latest.epochCredits), toNum(prev.epochCredits));
   const skipDelta = toNum(latest.skipRate) - toNum(prev.skipRate);
   const apyDelta = toNum(latest.compoundOverallApy) - toNum(prev.compoundOverallApy);
-
-  // Rough net income calc
   const netIncome = toNum(latest.rewards) + toNum(latest.mevToValidator) - toNum(latest.voteCost);
 
   return (
@@ -122,7 +116,7 @@ export function OverviewTab({ data, benchmarks }: OverviewTabProps) {
         />
       </div>
 
-      {/* APY Breakdown Chart */}
+      {/* APY Breakdown Chart — now with Total APY line */}
       <div className="glass-card mb-5">
         <h3 className="mb-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">
           APY Breakdown Over Time
@@ -143,19 +137,20 @@ export function OverviewTab({ data, benchmarks }: OverviewTabProps) {
                 <stop offset="95%" stopColor={COLORS.success} stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(240 4% 14%)" />
-            <XAxis dataKey="epoch" stroke="hsl(240 4% 24%)" fontSize={11} fontFamily="var(--font-mono)" />
-            <YAxis stroke="hsl(240 4% 24%)" fontSize={11} fontFamily="var(--font-mono)" unit="%" />
-            <Tooltip contentStyle={{ background: "hsl(240 10% 6% / 0.95)", border: "1px solid hsl(263 70% 50% / 0.3)", borderRadius: "8px", fontSize: "12px" }} />
+            <CartesianGrid {...CHART_GRID} />
+            <XAxis dataKey="epoch" {...CHART_AXIS} />
+            <YAxis {...CHART_AXIS} unit="%" />
+            <Tooltip {...CHART_TOOLTIP} />
             <Legend wrapperStyle={{ fontSize: "12px" }} />
             <Area type="monotone" dataKey="inflation_apy" name="Inflation APY" stroke={COLORS.primary} fill="url(#gInf)" strokeWidth={2} />
             <Area type="monotone" dataKey="mev_apy" name="MEV APY" stroke={COLORS.secondary} fill="url(#gMev)" strokeWidth={2} />
             <Area type="monotone" dataKey="block_apy" name="Block Rewards APY" stroke={COLORS.success} fill="url(#gBr)" strokeWidth={2} />
+            <Line type="monotone" dataKey="overall_apy" name="Total APY" stroke="#fbbf24" strokeWidth={2.5} dot={{ r: 3, fill: "#fbbf24" }} strokeDasharray="0" />
           </AreaChart>
         </ResponsiveContainer>
       </div>
 
-      {/* Bottom row: Skip Rate + TVC Credits trends */}
+      {/* Bottom row: Skip Rate + TVC Rank */}
       <div className="grid gap-4 md:grid-cols-2">
         <div className="glass-card">
           <h3 className="mb-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">
@@ -163,11 +158,12 @@ export function OverviewTab({ data, benchmarks }: OverviewTabProps) {
           </h3>
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(240 4% 14%)" />
-              <XAxis dataKey="epoch" stroke="hsl(240 4% 24%)" fontSize={10} fontFamily="var(--font-mono)" />
-              <YAxis stroke="hsl(240 4% 24%)" fontSize={10} fontFamily="var(--font-mono)" unit="%" />
-              <Tooltip contentStyle={{ background: "hsl(240 10% 6% / 0.95)", border: "1px solid hsl(263 70% 50% / 0.3)", borderRadius: "8px", fontSize: "12px" }} />
-              <Line type="monotone" dataKey="skip_rate" name="Chainflow" stroke={COLORS.warning} strokeWidth={2} dot={false} />
+              <CartesianGrid {...CHART_GRID} />
+              <XAxis dataKey="epoch" {...CHART_AXIS} fontSize={10} />
+              <YAxis {...CHART_AXIS} fontSize={10} unit="%" />
+              <Tooltip {...CHART_TOOLTIP} />
+              <Legend wrapperStyle={{ fontSize: "11px" }} />
+              <Line type="monotone" dataKey="skip_rate" name="Chainflow" stroke={COLORS.warning} strokeWidth={2} dot={{ r: 2 }} />
               <Line type="monotone" dataKey="shinobi_skip" name="Top Performer" stroke={COLORS.shinobiTop} strokeWidth={1.5} dot={false} strokeDasharray="4 4" />
               <Line type="monotone" dataKey="network_skip" name="Network Avg" stroke={COLORS.networkAvg} strokeWidth={1} dot={false} strokeDasharray="2 2" />
             </LineChart>
@@ -176,17 +172,15 @@ export function OverviewTab({ data, benchmarks }: OverviewTabProps) {
 
         <div className="glass-card">
           <h3 className="mb-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-            TVC Credits Trend
+            TVC Rank Over Time
           </h3>
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(240 4% 14%)" />
-              <XAxis dataKey="epoch" stroke="hsl(240 4% 24%)" fontSize={10} fontFamily="var(--font-mono)" />
-              <YAxis stroke="hsl(240 4% 24%)" fontSize={10} fontFamily="var(--font-mono)" />
-              <Tooltip contentStyle={{ background: "hsl(240 10% 6% / 0.95)", border: "1px solid hsl(263 70% 50% / 0.3)", borderRadius: "8px", fontSize: "12px" }} />
-              <Line type="monotone" dataKey="credits" name="Chainflow" stroke={COLORS.primary} strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="shinobi_credits" name="Top Performer" stroke={COLORS.shinobiTop} strokeWidth={1.5} dot={false} strokeDasharray="4 4" />
-              <Line type="monotone" dataKey="network_credits" name="Network Avg" stroke={COLORS.networkAvg} strokeWidth={1} dot={false} strokeDasharray="2 2" />
+              <CartesianGrid {...CHART_GRID} />
+              <XAxis dataKey="epoch" {...CHART_AXIS} fontSize={10} />
+              <YAxis {...CHART_AXIS} fontSize={10} reversed domain={["auto", "auto"]} />
+              <Tooltip {...CHART_TOOLTIP} />
+              <Line type="monotone" dataKey="tvc_rank" name="TVC Rank" stroke={COLORS.primary} strokeWidth={2.5} dot={{ r: 3, fill: COLORS.primary }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
