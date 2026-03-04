@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Activity, DollarSign, TrendingUp, BarChart3 } from "lucide-react";
 import { useValidatorData } from "@/hooks/use-validator-data";
 import { OverviewTab } from "@/components/dashboard/overview-tab";
 import { IncomeTab } from "@/components/dashboard/income-tab";
 import { PerformanceTab } from "@/components/dashboard/performance-tab";
 import { ComparisonTab } from "@/components/dashboard/comparison-tab";
+import { EpochRangePicker } from "@/components/dashboard/epoch-date-picker";
 import { shortenPubkey, cn } from "@/lib/utils";
 import { CHAINFLOW_PUBKEY } from "@/lib/constants";
 
@@ -22,9 +23,21 @@ type TabId = (typeof TABS)[number]["id"];
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [epochLimit, setEpochLimit] = useState(20);
+  const [customRange, setCustomRange] = useState<{ from: number; to: number } | null>(null);
+
+  const handlePresetChange = useCallback((limit: number) => {
+    setEpochLimit(limit);
+    setCustomRange(null);
+  }, []);
+
+  const handleRangeChange = useCallback((fromEpoch: number, toEpoch: number) => {
+    setCustomRange({ from: fromEpoch, to: toEpoch });
+  }, []);
 
   const { data: response, isLoading, error } = useValidatorData("chainflow", {
-    limit: epochLimit,
+    limit: customRange ? undefined : epochLimit,
+    fromEpoch: customRange?.from,
+    toEpoch: customRange?.to,
   });
 
   const validatorData = response?.data ?? [];
@@ -55,15 +68,12 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <select
-              value={epochLimit}
-              onChange={(e) => setEpochLimit(Number(e.target.value))}
-              className="rounded-lg border border-border bg-secondary px-3 py-1.5 text-xs text-muted-foreground outline-none focus:ring-1 focus:ring-primary"
-            >
-              <option value={5}>Last 5 Epochs</option>
-              <option value={10}>Last 10 Epochs</option>
-              <option value={20}>Last 20 Epochs</option>
-            </select>
+            <EpochRangePicker
+              epochLimit={epochLimit}
+              latestEpoch={latestEpoch}
+              onPresetChange={handlePresetChange}
+              onRangeChange={handleRangeChange}
+            />
 
             {latestEpoch && (
               <div className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-400">

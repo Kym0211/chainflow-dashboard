@@ -12,10 +12,13 @@ export async function GET(
   const resolvedPubkey = pubkey === "chainflow" ? CHAINFLOW_PUBKEY : pubkey;
 
   const url = new URL(request.url);
-  const limit = parseInt(url.searchParams.get("limit") || "20");
+  const limitParam = url.searchParams.get("limit");
   const withBenchmarks = url.searchParams.get("benchmarks") !== "false";
   const fromEpoch = url.searchParams.get("from_epoch");
   const toEpoch = url.searchParams.get("to_epoch");
+
+  // Only apply a limit if explicitly provided; epoch range queries return all matching rows
+  const limit = limitParam ? parseInt(limitParam) : (fromEpoch || toEpoch ? 200 : 20);
 
   try {
     // Build query conditions

@@ -20,13 +20,13 @@ export function useValidatorData(
     benchmarks?: boolean;
   }
 ) {
-  const { limit = 20, fromEpoch, toEpoch, benchmarks = true } = options ?? {};
+  const { limit, fromEpoch, toEpoch, benchmarks = true } = options ?? {};
 
   return useQuery<ValidatorDataResponse>({
     queryKey: ["validator", pubkey, limit, fromEpoch, toEpoch, benchmarks],
     queryFn: async () => {
       const params = new URLSearchParams();
-      params.set("limit", String(limit));
+      if (limit) params.set("limit", String(limit));
       if (fromEpoch) params.set("from_epoch", String(fromEpoch));
       if (toEpoch) params.set("to_epoch", String(toEpoch));
       if (!benchmarks) params.set("benchmarks", "false");
