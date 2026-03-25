@@ -1,0 +1,9 @@
+version: '1.0'
+services:
+  chainflow-dashboard:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.production
+    restart: unless-stopped
